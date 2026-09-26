@@ -1,5 +1,5 @@
 # data and generated artifacts never go into git
-dataset/
+dataset
 outputs/
 work/
 **/work/
@@ -8,3 +8,5 @@ work/
 *.zip
 __pycache__/
 .venv/
+utils
+*.log
