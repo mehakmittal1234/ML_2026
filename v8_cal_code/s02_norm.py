@@ -15,7 +15,7 @@ def work(args):
 
 if __name__ == '__main__':
     t0 = time.time()
-    with mp.Pool(6) as pool:
+    with mp.Pool(4) as pool:
         for sp in ('train', 'test'):
             for s in (1, 2, 3):
                 out = wp('norm', f'{sp}_s{s}.parquet')

@@ -5,7 +5,9 @@ set -e
 PY=${PY:-/home/user/venv/bin/python}
 cd "$(dirname "$0")"
 mkdir -p work/tmp
-run() { echo "$(date +%T) == $*" | tee -a work/tmp/PROGRESS; $PY "$@" > work/tmp/$(echo "$*" | tr ' /' '__').log 2>&1; }
+run() { local tag=$(echo "$*" | tr ' /' '__')
+        if [ -f work/tmp/done_$tag ]; then echo "skip $*"; return; fi
+        echo "$(date +%T) == $*" | tee -a work/tmp/PROGRESS; $PY "$@" > work/tmp/$tag.log 2>&1; touch work/tmp/done_$tag; }
 run s00_convert.py
 run s01_indic.py
 run s02_norm.py
