@@ -1,0 +1,10 @@
+# data and generated artifacts never go into git
+dataset/
+outputs/
+work/
+**/work/
+*.parquet
+*.tsv
+*.zip
+__pycache__/
+.venv/
