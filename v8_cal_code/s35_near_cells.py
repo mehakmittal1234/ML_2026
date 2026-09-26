@@ -14,9 +14,9 @@ from s34_census import typed
 PMIN, SHARE_MIN = 0.3, 0.6
 
 
-def cells(split, S, X):
-    """X: typed best-owner pairs (s34.typed) -> eq_or_order/hn_near rows with the three cell flags"""
-    N = X.filter((pl.col('name') == 'eq_or_order') & (pl.col('addr') == 'hn_near') & (pl.col('p') >= PMIN)).select(*KY, 'p')
+def cells(split, S, X, names=('eq_or_order',), addrs=('hn_near',)):
+    """X: typed best-owner pairs (s34.typed) -> rows of the given name/address types with the three cell flags"""
+    N = X.filter(pl.col('name').is_in(list(names)) & pl.col('addr').is_in(list(addrs)) & (pl.col('p') >= PMIN)).select(*KY, 'p', 'name', 'addr')
     R = pl.concat([pl.read_parquet(wp('norm2', f'{split}_s{s}.parquet'), columns=['id', 'ctry', 'nc', 'dz']).select(
         pl.col('id').alias('id2'), pl.lit(s, pl.Int8).alias('src'), 'ctry', 'nc', pl.col('dz').str.split(' ').list.first().fill_null('').alias('h')) for s in (2, 3)])
     R = R.filter(pl.col('h') != '').with_columns(pl.len().over('ctry', 'nc', 'h', 'src').alias('_ns'), pl.len().over('ctry', 'nc', 'h').alias('_na'))
