@@ -9,7 +9,22 @@ import sys
 from common import *
 base, OUT = sys.argv[1], sys.argv[2]
 if os.path.exists(os.path.join(OUT, 'matching_results.tsv')): sys.exit(f'{OUT} exists; refusing to overwrite')
-X = pl.read_parquet(wp('analysis', 'v15_groups.parquet'))
+import glob
+S = pl.read_parquet(wp('scores', 'ens1', 'test_s2_c0.parquet'), columns=[*KY, 'p'])
+P0 = pl.read_parquet(os.path.join(base, 'pairs.parquet')).select(KY)
+nc = P0.group_by('id1', 'src').len().rename({'len': 'nc'})
+T = pl.read_parquet(wp('scores', 'st1', 'test_struct.parquet')).select(*KY, 'ctry', 'q')
+F = pl.scan_parquet(sorted(glob.glob(wp('feat', 'f50', 'test_c*.parquet')))).filter(pl.col('name_rel') == 0).select(*KY, 'hn_rel', 'k_s1', 'x_noaddr').collect() \
+      .join(pl.read_parquet(wp('feat', 'f67', 'test.parquet'), columns=[*KY, 'sd']), on=KY, how='left')
+X = T.join(S, on=KY).join(F, on=KY).join(P0, on=KY, how='anti').join(P0.select('id2', 'src'), on=['id2', 'src'], how='anti') \
+     .filter((pl.col('q') >= 0.8) & (pl.col('ctry') != 'France'))
+X = X.with_columns(pl.when((pl.col('hn_rel') == 4) & (pl.col('sd') < 0)).then(pl.lit('G1 near,lower'))
+                   .when((pl.col('hn_rel') == 3) & (pl.col('sd') < 0)).then(pl.lit('G2 trunc,lower'))
+                   .when((pl.col('hn_rel') == 0) & (pl.col('k_s1') == 1)).then(pl.lit('G3 noaddr,unique'))
+                   .when((pl.col('hn_rel') == 5) & (pl.col('k_s1') == 1)).then(pl.lit('G4 far,unique'))
+                   .when((pl.col('hn_rel') == 1) & (pl.col('k_s1') == 1)).then(pl.lit('G5 hn missing,unique')).alias('g')).filter(pl.col('g').is_not_null())
+X = X.sort('q', descending=True).unique(['id2', 'src'], keep='first')
+print('groups:', X.group_by('ctry', 'g').len().sort('ctry', 'g').rows())
 A = X.filter(~((pl.col('ctry') == 'US') & (pl.col('g') == 'G3 noaddr,unique'))).select(KY)
 P = pl.read_parquet(os.path.join(base, 'pairs.parquet')).select(KY)
 A = A.join(P.select('id2', 'src'), on=['id2', 'src'], how='anti')

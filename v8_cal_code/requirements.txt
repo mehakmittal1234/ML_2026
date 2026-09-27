@@ -1,0 +1,10 @@
+# Python 3.11 (tested with 3.11.15). Versions used to build v14e_frfull (public LB 0.984861).
+polars==1.44.2
+pyarrow==25.0.1
+numpy==2.4.6
+scipy==1.17.1
+lightgbm==4.7.0
+rapidfuzz==3.14.6
+# needed only for the full rebuild of the base scores (retrieval / stage-1 / stage-2, run_upto_stage2.sh):
+duckdb==1.5.5
+pandas==3.0.6
