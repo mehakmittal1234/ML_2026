@@ -15,10 +15,12 @@ BASE = os.environ.get('S19_BASE', 'm2t')              # validation baseline scor
 def band(split):
     B = pl.read_parquet(wp('feat', f'{SRC}_s2', f'{split}.parquet'))
     for e in ('x', 'sup'): B = B.join(pl.read_parquet(wp('feat', f'{SRC}_s2', f'{split}_{e}.parquet')), on=KY, how='left')
-    B = B.join(pl.read_parquet(wp('feat', 'm1_s2', f'{split}_tells.parquet')), on=KY, how='left')
-    if SRC != 'm1': B = B.join(pl.read_parquet(wp('feat', 'm1_s2', f'{split}.parquet'), columns=[*KY, 'p1']).rename({'p1': 'p1_stage1'}), on=KY, how='left')
+    B = B.join(pl.read_parquet(wp('feat', os.environ.get('S19_TELLS', 'm1') + '_s2', f'{split}_tells.parquet')), on=KY, how='left')
+    for e in [x for x in os.environ.get('S19_EXTRA', '').split(',') if x]:
+        B = B.join(pl.read_parquet(wp('feat', e, f'{split}.parquet')), on=KY, how='left')
+    if SRC != 'm1' and os.environ.get('S19_NOP1S') != '1': B = B.join(pl.read_parquet(wp('feat', 'm1_s2', f'{split}.parquet'), columns=[*KY, 'p1']).rename({'p1': 'p1_stage1'}), on=KY, how='left')
     B = B.filter((pl.col('p1') > LO) & (pl.col('p1') < HI))
-    F1 = pl.concat([pl.scan_parquet(wp('feat', 'v6c', f'{split}_s{s}_c*.parquet')).join(B.lazy().filter(pl.col('src') == s).select(KY), on=KY, how='semi')
+    F1 = pl.concat([pl.scan_parquet(wp('feat', os.environ.get('S19_FTAG', 'v6c'), f'{split}_s{s}_c*.parquet')).join(B.lazy().filter(pl.col('src') == s).select(KY), on=KY, how='semi')
                     for s in (2, 3)], how='vertical_relaxed').collect()
     F1 = F1.join(pl.scan_parquet(wp('feat', 'v6c', f'{split}_pairctx.parquet')).join(B.lazy().select(KY), on=KY, how='semi').collect(), on=KY, how='left')
     dup = [c for c in F1.columns if c in B.columns and c not in KY]
@@ -36,7 +38,9 @@ if __name__ == '__main__':
     print(f'band pairs {X.height}, features {len(C)}, true rate {X["y"].mean():.3f} ({time.time()-t0:.0f}s)', flush=True)
     if mode == 'eval':
         tr = X.filter(pl.col('fold') != 0)
-        m = lgb.train(PAR, lgb.Dataset(tr.select(C).to_numpy().astype(np.float32), tr['y'].to_numpy(), feature_name=C), ROUNDS); del tr
+        WNT = float(os.environ.get('S19_WNT', '1'))     # up-weight near-twin pairs (similar name, same address) toward their test share
+        wt = np.where(((tr['n_tset'] >= 60) & (tr['n_exact'] == 0) & (tr['a_tset'] >= 90)).fill_null(False).to_numpy(), WNT, 1.0)
+        m = lgb.train(PAR, lgb.Dataset(tr.select(C).to_numpy().astype(np.float32), tr['y'].to_numpy(), weight=wt, feature_name=C), ROUNDS); del tr
         print(f'trained ({time.time()-t0:.0f}s); top gain:', sorted(zip(C, m.feature_importance('gain').round()), key=lambda x: -x[1])[:20], flush=True)
         V = X.filter(pl.col('fold') == 0)
         pv = m.predict(V.select(C).to_numpy().astype(np.float32), num_threads=6)
@@ -47,7 +51,9 @@ if __name__ == '__main__':
         new = pl.concat([base.join(V.select(KY), on=KY, how='anti'), V.select(*KY, 'p1', pl.Series('p', pv).cast(pl.Float32))], how='vertical_relaxed')
         os.makedirs(wp('scores', out), exist_ok=True); new.write_parquet(wp('scores', out, 'train_s2_c0.parquet'))
     else:
-        m = lgb.train(PAR, lgb.Dataset(X.select(C).to_numpy().astype(np.float32), X['y'].to_numpy(), feature_name=C), ROUNDS); del X
+        WNT = float(os.environ.get('S19_WNT', '1'))
+        wt = np.where(((X['n_tset'] >= 60) & (X['n_exact'] == 0) & (X['a_tset'] >= 90)).fill_null(False).to_numpy(), WNT, 1.0)
+        m = lgb.train(PAR, lgb.Dataset(X.select(C).to_numpy().astype(np.float32), X['y'].to_numpy(), weight=wt, feature_name=C), ROUNDS); del X
         m.save_model(wp('models', f'{out}_specialist.txt'))
         T = band('test'); pt = m.predict(T.select(C).to_numpy().astype(np.float32), num_threads=6)
         base = pl.read_parquet(wp('scores', sys.argv[5] if len(sys.argv) > 5 else 'v7t', 'test_s2_c0.parquet'))

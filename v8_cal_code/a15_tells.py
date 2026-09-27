@@ -19,7 +19,16 @@ def fields(split, s, ids):
 def tells(split, S):
     NZ = A14.noise_tokens(split)
     voc = pl.read_parquet(wp('norm2', f'{split}_s1.parquet'), columns=['ctry', 'nc']).select('ctry', pl.col('nc').str.split(' ')).explode('nc') \
-            .group_by('ctry', 'nc').len().filter(pl.col('len') >= 5).rename({'nc': 'tok'}).drop('len')
+            .group_by('ctry', 'nc').len()
+    if os.environ.get('TELLS_SCALE') == '1':        # scale the df>=5 vocabulary threshold to this split's S1 size per country (France on the US train scale)
+        n_s = dict(pl.read_parquet(wp('norm2', f'{split}_s1.parquet'), columns=['ctry']).group_by('ctry').len().iter_rows())
+        n_t = dict(pl.read_parquet(wp('norm2', 'train_s1.parquet'), columns=['ctry']).group_by('ctry').len().iter_rows())
+        mins = pl.DataFrame({'ctry': list(n_s), 'vmin': [max(1, round(5 * n_s[c] / n_t.get(c, n_t['US']))) for c in n_s]})
+        print('tells vocabulary minimum df per country:', dict(mins.iter_rows()), flush=True)
+        voc = voc.join(mins, on='ctry').filter(pl.col('len') >= pl.col('vmin')).drop('vmin')
+    else:
+        voc = voc.filter(pl.col('len') >= 5)
+    voc = voc.rename({'nc': 'tok'}).drop('len')
     A = fields(split, 1, S.select(pl.col('id1').unique().alias('id')))
     R = pl.concat([fields(split, s, S.filter(pl.col('src') == s).select(pl.col('id2').unique().alias('id'))).with_columns(pl.lit(s, pl.Int8).alias('src')) for s in (2, 3)])
     X = S.join(A.rename({'id': 'id1', 'tk': 'tk1', 'lg': 'lg1', 'dgs': 'd1'}), on='id1').join(R.rename({'id': 'id2', 'tk': 'tk2', 'lg': 'lg2', 'dgs': 'd2'}).drop('ctry'), on=['id2', 'src'])
