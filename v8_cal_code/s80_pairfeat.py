@@ -8,17 +8,20 @@ differ between train and test: e.g. 'holdings', 'downtown' become noise words on
 --trainidf (test only): IDF weights from the TRAIN corpus for US / India tokens (France keeps test IDF, it has no train data), written to
 feat/f80t/. Split-specific IDF is a test-only failure: 'service' has IDF 5.02 on train and 5.46 on test (its document frequency share
 drops with the test's distractor mix), which pushes it over the model's learned noise-word / real-word boundary (SHAP -6.3 vs -0.9).
-usage: python s80_pairfeat.py <split> [--trainidf]   -> feat/f80[t]/<split>_c<k>.parquet"""
+usage: python s80_pairfeat.py <split> [--trainidf | --ctxfixed]   -> feat/f80 | f80t | f80F/<split>_c<k>.parquet"""
 import sys, glob, time
 from rapidfuzz import process, fuzz
 from common import *
 import feats2
 from s11_stage2 import raw_names
 split = sys.argv[1]; t0 = time.time()
-TRIDF = '--trainidf' in sys.argv
-OUT = wp('feat', 'f80t' if TRIDF else 'f80'); os.makedirs(OUT, exist_ok=True)
+TRIDF = '--trainidf' in sys.argv; CFIX = '--ctxfixed' in sys.argv          # --ctxfixed: idf_fix.CtxFixed (per-country train-scale IDF)
+OUT = wp('feat', 'f80F' if CFIX else ('f80t' if TRIDF else 'f80')); os.makedirs(OUT, exist_ok=True)
 S = pl.scan_parquet(sorted(glob.glob(wp('feat', 'f50', f'{split}_c*.parquet')))).select(KY).collect()
 ctx = feats2.Ctx(split)
+if CFIX:
+    import idf_fix
+    ctx = idf_fix.CtxFixed(split); print('IDF: CtxFixed factors', ctx.fac, flush=True)
 if TRIDF:
     tr = feats2.Ctx('train')
     ctx.dfn = pl.concat([tr.dfn, ctx.dfn.filter(~pl.col('ctry').is_in(tr.dfn['ctry'].unique().implode()))])

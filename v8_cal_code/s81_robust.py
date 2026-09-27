@@ -10,7 +10,8 @@ from common import *
 mode = sys.argv[1]; t0 = time.time()
 R = int(os.environ.get('R', '900'))
 F80T = os.environ.get('F80T', '0') == '1'      # test features built with train IDF tables (s80 --trainidf)
-fdir = lambda split: 'f80t' if (F80T and split == 'test') else 'f80'
+F80DIR = os.environ.get('F80DIR', 'f80t' if F80T else 'f80')           # test feature folder: f80 (test IDF), f80t (train df tables), f80F (CtxFixed)
+fdir = lambda split: F80DIR if split == 'test' else 'f80'
 F50 = ['n_tset', 'n_ratio', 'n_part', 'nt_ratio', 'a_tset', 'a_ratio', 'n_inter', 'n_extra2', 'n_extra1', 'name_rel', 'legal_rel', 'hn_rel',
        'hn_ldiff', 'street_inter', 'street_extra2', 'city_eq', 'dg_jac', 'dg_extra2', 'x_noaddr', 'k_s1']
 PAR = dict(objective='binary', learning_rate=0.06, num_leaves=255, min_data_in_leaf=100, feature_fraction=0.7, bagging_fraction=0.7, bagging_freq=1,
